@@ -54,13 +54,16 @@ on_chain:
       - index: 0
         name: severity
         source_path: severity
+        description: CVSS severity of the CVE (LOW/MEDIUM/HIGH/CRITICAL)
     integers:
       - index: 0
         name: cvss_score_x100
         source_path: cvss_score
         multiplier: 100
+        description: CVSS base score scaled by 100
     bools:
       - index: 0
         name: is_critical
         source_path: severity
         transform_rule: bool_from_eq:CRITICAL
+        description: True when the CVE severity is CRITICAL
