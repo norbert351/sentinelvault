@@ -1,0 +1,15 @@
+{
+  "name": "sentinelvault-app",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "SentinelVault Track 3 application - treasury & partner vetting on ranked, verified multi-intent Telegraph intelligence",
+  "main": "src/index.js",
+  "scripts": {
+    "start": "node src/index.js",
+    "test": "node --test src/**/*.test.js"
+  },
+  "engines": {
+    "node": ">=22"
+  }
+}
