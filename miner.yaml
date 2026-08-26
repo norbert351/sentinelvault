@@ -1,0 +1,66 @@
+version: "1"
+kind: miner
+id: 205
+slug: sentinelvault-cve
+name: SentinelVault CVE Lookup
+description: Deterministic CVE lookup resolving severity, CVSS score and vulnerability description for a given CVE identifier. Backed by the free CIRCL CVE API (no key required).
+base_url: https://sentinelvault-cve.onrender.com
+docs:
+  website: https://telegraphprotocol.com
+  repository: https://github.com/telegraphprotocol/telegraph-usecases
+
+rate_limit_per_sec: 5
+cache_ttl_sec: 300
+circuit_threshold: 5
+circuit_cooldown_seconds: 30
+
+endpoints:
+  - path: /cve
+    external_path: /cve
+    method: GET
+    description: Resolve a CVE identifier to its severity, CVSS score and description.
+
+input_schema:
+  type: object
+  required:
+    - cve_id
+  properties:
+    cve_id:
+      type: string
+      pattern: "^CVE-\\d{4}-\\d{4,7}$"
+
+output_schema:
+  type: object
+  properties:
+    cve_id: { type: string }
+    severity: { type: string, enum: [LOW, MEDIUM, HIGH, CRITICAL] }
+    cvss_score: { type: number }
+    confidence: { type: number }
+    description: { type: string }
+
+semantics:
+  signal_mapping:
+    label_field: severity
+    confidence_field: confidence
+    reason_field: description
+  supported_intents:
+    - CVE_LOOKUP
+
+on_chain:
+  transform: direct
+  min_price_usdc: 0.01
+  fields:
+    strings:
+      - index: 0
+        name: severity
+        source_path: severity
+    integers:
+      - index: 0
+        name: cvss_score_x100
+        source_path: cvss_score
+        multiplier: 100
+    bools:
+      - index: 0
+        name: is_critical
+        source_path: severity
+        transform_rule: bool_from_eq:CRITICAL

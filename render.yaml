@@ -1,0 +1,21 @@
+# Render Blueprint — SentinelVault CVE miner data service (Telegraph Track 1)
+#
+# Import THIS repo in Render: New + → Blueprint → choose this GitHub repo →
+# log in with GitHub. Render creates the sentinelvault-cve web service, which
+# serves the CVE_LOOKUP signal to Telegraph nodes. The live URL becomes the
+# base_url in miner.yaml.
+services:
+  - type: web
+    name: sentinelvault-cve
+    runtime: node
+    region: oregon
+    plan: free
+    rootDir: miner-service
+    buildCommand: npm install
+    startCommand: npm start
+    healthCheckPath: /health
+    envVars:
+      - key: NODE_VERSION
+        value: 22.13.0
+      - key: PORT
+        value: 10000

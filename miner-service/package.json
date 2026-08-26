@@ -1,0 +1,14 @@
+{
+  "name": "sentinelvault-cve-miner",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "description": "CVE_LOOKUP miner data service for the Telegraph protocol. Wraps the free CIRCL CVE API (no key needed) into a normalized, cacheable signal.",
+  "main": "index.js",
+  "scripts": {
+    "start": "node index.js"
+  },
+  "engines": {
+    "node": ">=18"
+  }
+}

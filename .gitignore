@@ -1,0 +1,14 @@
+# npm
+node_modules/
+*.log
+
+# rust / wasm build
+scoring-module/target/
+Cargo.lock
+
+# deploy / secrets
+.env
+.env.*
+!*.json
+*.pem
+*.key
