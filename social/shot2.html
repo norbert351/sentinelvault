@@ -1,0 +1,42 @@
+<!DOCTYPE html><html><head>
+<meta charset="utf-8"><style>
+*{margin:0;padding:0;box-sizing:border-box}
+body{font-family:'JetBrains Mono',ui-monospace,monospace;background:#020617;min-height:100vh;display:flex;align-items:center;justify-content:center;padding:40px;color:#e2e8f0}
+.card{background:#0f172a;border:1px solid #1e293b;border-radius:16px;padding:28px 30px;width:860px;max-width:96vw}
+.top{display:flex;justify-content:space-between;align-items:center;margin-bottom:18px}
+.badge{background:rgba(251,113,133,.12);color:#fb7185;border:1px solid rgba(251,113,133,.35);padding:5px 12px;border-radius:999px;font-size:12px;font-weight:700}
+.pill{font-size:11px;color:#94a3b8}
+h1{font-size:22px;font-weight:800;margin-bottom:2px}
+.sub{color:#94a3b8;font-size:13px;margin-bottom:20px}
+.metrics{display:grid;grid-template-columns:repeat(3,1fr);gap:14px;margin-bottom:16px}
+.mbox{background:#020617;border:1px solid #1e293b;border-radius:12px;padding:16px;text-align:center}
+.big{font-size:24px;font-weight:800}
+.ulbl{font-size:10px;color:#64748b;text-transform:uppercase;letter-spacing:.08em;margin-top:6px}
+.bar{margin-bottom:18px}
+.btitle{font-size:12px;color:#94a3b8;margin-bottom:8px}
+.track{height:10px;background:#111a2e;border-radius:6px;position:relative;overflow:hidden;margin-bottom:6px}
+.fill{position:absolute;inset:0;border-radius:6px}
+.legend{display:flex;gap:18px;font-size:11px;color:#94a3b8}
+.dot{display:inline-block;width:8px;height:8px;border-radius:50%;margin-right:5px;vertical-align:middle}
+.foot{color:#475569;font-size:11px;border-top:1px solid #1e293b;padding-top:12px}
+</style></head><body>
+<div class="card">
+  <div class="top"><span class="badge">SCORER · WASM EVAL</span><span class="pill">CVE_LOOKUP · on-chain eval</span></div>
+  <h1>Scorer <span class="warn">rejected by champion</span></h1>
+  <div class="sub">Passed structural checks, lost the champion gauntlet · stays in the eval pool</div>
+  <div class="metrics">
+    <div class="mbox"><div class="big ok">1.00</div><div class="ulbl">self-match</div></div>
+    <div class="mbox"><div class="big">13/15</div><div class="ulbl">good &gt; bad</div></div>
+    <div class="mbox"><div class="big">0.36</div><div class="ulbl">score spread</div></div>
+  </div>
+  <div class="bar">
+    <div class="btitle">good-vs-bad margin · applicant vs current champion</div>
+    <div class="track"><div class="fill" style="width:25%;background:#34d399"></div></div>
+    <div class="legend"><span><span class="dot" style="background:#34d399"></span>sentinelvault 0.21</span><span><span class="dot" style="background:#fb7185"></span>champion 0.81</span></div>
+  </div>
+  <div class="box"><div class="lbl">signal · sample CVE-2021-44228</div>
+    <div class="kv"><span class="k">severity </span><span class="v ok">CRITICAL</span> · <span class="k">cvss </span><span class="v">10.0</span> · <span class="k">confidence </span><span class="v">1.0</span></div>
+  </div>
+  <div class="foot">honest scorecard · github.com/norbert351/sentinelvault · tagged @Telegraphprotoc</div>
+</div>
+</body></html>
