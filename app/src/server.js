@@ -6,12 +6,15 @@ import http from 'node:http';
 import { URL } from 'node:url';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { readFile } from 'node:fs/promises';
 import { screen } from './verdict.js';
 import { createSignalSource } from './telegraph.js';
 import { commitVerdict, createRecorder } from './proof.js';
 import { openDb, insertScreen, insertProof, getVerdictAudit } from './storage.js';
 
 const __dir = dirname(fileURLToPath(import.meta.url));
+const WEB_DIR = join(__dir, '..', 'web');
+const MIME = { '.html': 'text/html', '.js': 'application/javascript', '.css': 'text/css', '.png': 'image/png', '.svg': 'image/svg+xml', '.json': 'application/json' };
 const PORT = process.env.PORT || 8090;
 const SOURCE_MODE = process.env.SIGNAL_SOURCE === 'live' ? 'live' : 'simulated';
 const PROOF_MODE = process.env.PROOF_MODE === 'erc8183' ? 'erc8183' : 'logging';
@@ -85,6 +88,21 @@ function send(res, code, obj) {
   res.end(JSON.stringify(obj));
 }
 
+// Serve the frontend (app/web) so a single URL hosts UI + API.
+async function serveStatic(req, res, pathname) {
+  let rel = pathname === '/' ? 'index.html' : pathname.slice(1);
+  // prevent path traversal
+  if (rel.includes('..') || rel.startsWith('/')) return send(res, 403, { error: 'forbidden' });
+  try {
+    const data = await readFile(join(WEB_DIR, rel));
+    const ext = '.' + rel.split('.').pop().toLowerCase();
+    res.writeHead(200, { 'Content-Type': MIME[ext] || 'application/octet-stream' });
+    res.end(data);
+  } catch {
+    return send(res, 404, { error: 'not_found', detail: rel });
+  }
+}
+
 const server = http.createServer(async (req, res) => {
   if (req.method === 'OPTIONS') return send(res, 204, {});
   const url = new URL(req.url, `http://localhost:${PORT}`);
@@ -93,6 +111,7 @@ const server = http.createServer(async (req, res) => {
     if (url.pathname === '/screen' && req.method === 'POST') return handleScreen(req, res);
     const subMatch = /^\/submissions\/(\d+)$/.exec(url.pathname);
     if (subMatch && req.method === 'GET') return handleGet(req, res, subMatch[1]);
+    if (req.method === 'GET') return serveStatic(req, res, url.pathname);
     return send(res, 404, { error: 'not_found' });
   } catch (err) {
     return send(res, 500, { error: 'server_error', detail: err.message });
