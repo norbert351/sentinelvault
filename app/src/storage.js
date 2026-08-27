@@ -45,6 +45,7 @@ export function openDb(path) {
       commit_digest TEXT NOT NULL,
       ref TEXT,
       on_chain INTEGER DEFAULT 0,
+      tx_count INTEGER DEFAULT 0,
       created_at TEXT DEFAULT (datetime('now'))
     );
   `);
@@ -85,10 +86,10 @@ export function insertScreen(db, { target, kind, verdict, signals }) {
   return { submissionId, verdictId };
 }
 
-export function insertProof(db, { verdictId, mode, commit, ref, onChain = false }) {
+export function insertProof(db, { verdictId, mode, commit, ref, onChain = false, txCount = 0 }) {
   db.prepare(
-    'INSERT INTO proofs (verdict_id, mode, commit_digest, ref, on_chain) VALUES (?,?,?,?,?)'
-  ).run(verdictId, mode, commit, ref, onChain ? 1 : 0);
+    'INSERT INTO proofs (verdict_id, mode, commit_digest, ref, on_chain, tx_count) VALUES (?,?,?,?,?,?)'
+  ).run(verdictId, mode, commit, ref, onChain ? 1 : 0, txCount);
 }
 
 export function getVerdictAudit(db, submissionId) {
@@ -105,7 +106,7 @@ export function getVerdictAudit(db, submissionId) {
   const proofs = db
     .prepare('SELECT * FROM proofs WHERE verdict_id = ?')
     .all(v.id)
-    .map((p) => ({ mode: p.mode, commit: p.commit_digest, ref: p.ref, onChain: p.on_chain === 1 }));
+    .map((p) => ({ mode: p.mode, commit: p.commit_digest, ref: p.ref, onChain: p.on_chain === 1, txCount: p.tx_count }));
   return {
     submission: sub,
     verdict: {

@@ -4,12 +4,19 @@
   "private": true,
   "type": "module",
   "description": "SentinelVault Track 3 application - treasury & partner vetting on ranked, verified multi-intent Telegraph intelligence",
-  "main": "src/index.js",
+  "main": "src/server.js",
   "scripts": {
-    "start": "node src/index.js",
+    "start": "node --dns-result-order=ipv4first src/server.js",
     "test": "node --test src/**/*.test.js"
   },
   "engines": {
     "node": ">=22"
+  },
+  "dependencies": {
+    "@x402/core": "^2.24.0",
+    "@x402/evm": "^2.24.0",
+    "@x402/fetch": "^2.24.0",
+    "ethers": "^6.17.0",
+    "viem": "^2.56.0"
   }
 }

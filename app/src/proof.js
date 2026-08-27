@@ -35,7 +35,20 @@ export function createRecorder(mode = 'logging') {
       );
     };
   }
-  return async function recordLogging({ commit }) {
+  return async function recordLogging({ commit, verdictId, signals = [] }) {
+    // In live mode each signal carries a real on-chain x402 settlement tx hash.
+    // Surface that as on-chain provenance instead of "logging only".
+    const onChainTxs = (signals || []).map((s) => s.txHash).filter(Boolean);
+    if (onChainTxs.length) {
+      return {
+        mode: 'logging',
+        commit,
+        ref: onChainTxs[0],
+        onChain: true,
+        txCount: onChainTxs.length,
+        detail: `Verdict bound to ${onChainTxs.length} real on-chain x402 payment txs (USDC settled on Base Sepolia).`,
+      };
+    }
     return {
       mode: 'logging',
       commit,

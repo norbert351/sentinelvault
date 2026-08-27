@@ -18,7 +18,7 @@ const PROOF_MODE = process.env.PROOF_MODE === 'erc8183' ? 'erc8183' : 'logging';
 const DB_PATH = process.env.APP_DB || join(__dir, '..', 'sentinelvault.db');
 
 const db = openDb(DB_PATH);
-const signalsFor = createSignalSource(SOURCE_MODE);
+const signalsFor = await createSignalSource(SOURCE_MODE);
 const recordProof = createRecorder(PROOF_MODE);
 console.log(`SentinelVault API on :${PORT} | signal source: ${SOURCE_MODE} | proof: ${PROOF_MODE}`);
 
@@ -52,13 +52,14 @@ async function handleScreen(req, res) {
       signals: verdict.signals,
     });
     const commit = commitVerdict(verdict);
-    const proof = await recordProof({ commit, verdictId });
+    const proof = await recordProof({ commit, verdictId, signals: verdict.signals });
     insertProof(db, {
       verdictId,
       mode: proof.mode,
       commit,
       ref: proof.ref,
       onChain: proof.onChain,
+      txCount: proof.txCount || 0,
     });
     return send(res, 200, { id: submissionId, verdictId, target, ...verdict, proof });
   } catch (err) {

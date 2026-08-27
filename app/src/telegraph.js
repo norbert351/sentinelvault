@@ -47,14 +47,11 @@ export async function simulatedSignals(target) {
   return signals.map((s) => ({ ...s, txHash: null }));
 }
 
-// --- live source (real Telegraph network via x402, requires USDC + keys) --
-export function liveSignals(_target) {
-  throw new Error(
-    'LIVE source requires USDC + EVM keys. Wire the x402 engine client here (see src/x402-client) or keep SIGNAL_SOURCE=simulated until funded.'
-  );
-}
-
-export function createSignalSource(mode) {
-  if (mode === 'live') return liveSignals;
+export async function createSignalSource(mode) {
+  if (mode === 'live') {
+    // Real Telegraph network via x402 (requires SENTINEL_PK + funded USDC).
+    const mod = await import('./live.js');
+    return mod.liveSignals;
+  }
   return simulatedSignals;
 }
