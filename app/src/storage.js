@@ -38,6 +38,15 @@ export function openDb(path) {
       tx_hash TEXT,
       raw_json TEXT
     );
+    CREATE TABLE IF NOT EXISTS proofs (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      verdict_id INTEGER NOT NULL REFERENCES verdicts(id),
+      mode TEXT NOT NULL,
+      commit_digest TEXT NOT NULL,
+      ref TEXT,
+      on_chain INTEGER DEFAULT 0,
+      created_at TEXT DEFAULT (datetime('now'))
+    );
   `);
   return db;
 }
@@ -76,6 +85,12 @@ export function insertScreen(db, { target, kind, verdict, signals }) {
   return { submissionId, verdictId };
 }
 
+export function insertProof(db, { verdictId, mode, commit, ref, onChain = false }) {
+  db.prepare(
+    'INSERT INTO proofs (verdict_id, mode, commit_digest, ref, on_chain) VALUES (?,?,?,?,?)'
+  ).run(verdictId, mode, commit, ref, onChain ? 1 : 0);
+}
+
 export function getVerdictAudit(db, submissionId) {
   const sub = db
     .prepare('SELECT * FROM submissions WHERE id = ?')
@@ -87,6 +102,10 @@ export function getVerdictAudit(db, submissionId) {
   const sigRows = db
     .prepare('SELECT * FROM signals WHERE verdict_id = ?')
     .all(v.id);
+  const proofs = db
+    .prepare('SELECT * FROM proofs WHERE verdict_id = ?')
+    .all(v.id)
+    .map((p) => ({ mode: p.mode, commit: p.commit_digest, ref: p.ref, onChain: p.on_chain === 1 }));
   return {
     submission: sub,
     verdict: {
@@ -109,5 +128,6 @@ export function getVerdictAudit(db, submissionId) {
         }
       })(),
     })),
+    proofs,
   };
 }

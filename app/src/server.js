@@ -8,16 +8,19 @@ import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { screen } from './verdict.js';
 import { createSignalSource } from './telegraph.js';
-import { openDb, insertScreen, getVerdictAudit } from './storage.js';
+import { commitVerdict, createRecorder } from './proof.js';
+import { openDb, insertScreen, insertProof, getVerdictAudit } from './storage.js';
 
 const __dir = dirname(fileURLToPath(import.meta.url));
 const PORT = process.env.PORT || 8090;
 const SOURCE_MODE = process.env.SIGNAL_SOURCE === 'live' ? 'live' : 'simulated';
+const PROOF_MODE = process.env.PROOF_MODE === 'erc8183' ? 'erc8183' : 'logging';
 const DB_PATH = process.env.APP_DB || join(__dir, '..', 'sentinelvault.db');
 
 const db = openDb(DB_PATH);
 const signalsFor = createSignalSource(SOURCE_MODE);
-console.log(`SentinelVault API on :${PORT} | signal source: ${SOURCE_MODE}`);
+const recordProof = createRecorder(PROOF_MODE);
+console.log(`SentinelVault API on :${PORT} | signal source: ${SOURCE_MODE} | proof: ${PROOF_MODE}`);
 
 function readBody(req) {
   return new Promise((resolve) => {
@@ -48,7 +51,16 @@ async function handleScreen(req, res) {
       verdict,
       signals: verdict.signals,
     });
-    return send(res, 200, { id: submissionId, verdictId, target, ...verdict });
+    const commit = commitVerdict(verdict);
+    const proof = await recordProof({ commit, verdictId });
+    insertProof(db, {
+      verdictId,
+      mode: proof.mode,
+      commit,
+      ref: proof.ref,
+      onChain: proof.onChain,
+    });
+    return send(res, 200, { id: submissionId, verdictId, target, ...verdict, proof });
   } catch (err) {
     return send(res, 500, { error: 'screen_failed', detail: err.message });
   }
