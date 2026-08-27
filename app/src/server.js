@@ -1,6 +1,12 @@
 // SentinelVault HTTP API (Track 3).
-// POST /screen        -> run a target through verified multi-intent intelligence and return a verdict.
-// GET  /submissions/:id -> full audit trail (verdict + per-signal provenance).
+// POST /screen          -> run a target through verified multi-intent intelligence, return a verdict (+ webhook fan-out)
+// GET  /submissions/:id -> full audit trail (verdict + per-signal provenance)
+// POST /webhooks        -> register a callback URL (events: verdict)
+// GET  /webhooks        -> list callbacks
+// DELETE /webhooks/:id  -> remove a callback
+// POST /watch           -> add an auto-watched target (scheduled re-screen)
+// GET  /watch           -> list watched targets
+// DELETE /watch/:id     -> stop watching
 // GET  /health
 import http from 'node:http';
 import { URL } from 'node:url';
@@ -8,9 +14,13 @@ import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { readFile } from 'node:fs/promises';
 import { screen } from './verdict.js';
+import { screenWithReroute } from './reroute.js';
 import { createSignalSource } from './telegraph.js';
 import { commitVerdict, createRecorder } from './proof.js';
-import { openDb, insertScreen, insertProof, getVerdictAudit } from './storage.js';
+import { openStore } from './storage.js';
+import { checkAuth } from './auth.js';
+import { deliver, addVerdictWebhook } from './webhook.js';
+import { startWatcher } from './watcher.js';
 
 const __dir = dirname(fileURLToPath(import.meta.url));
 const WEB_DIR = join(__dir, '..', 'web');
@@ -18,23 +28,36 @@ const MIME = { '.html': 'text/html', '.js': 'application/javascript', '.css': 't
 const PORT = process.env.PORT || 8090;
 const SOURCE_MODE = process.env.SIGNAL_SOURCE === 'live' ? 'live' : 'simulated';
 const PROOF_MODE = process.env.PROOF_MODE === 'erc8183' ? 'erc8183' : 'logging';
-const DB_PATH = process.env.APP_DB || join(__dir, '..', 'sentinelvault.db');
+const REROUTE = process.env.SENTINEL_REROUTE !== '0';
 
-const db = openDb(DB_PATH);
+const store = await openStore();
 const signalsFor = await createSignalSource(SOURCE_MODE);
 const recordProof = createRecorder(PROOF_MODE);
-console.log(`SentinelVault API on :${PORT} | signal source: ${SOURCE_MODE} | proof: ${PROOF_MODE}`);
+
+// shared: run a target through the full pipeline, persist, fan out to webhooks
+async function runAndRecord(target, kind) {
+  let rawSignals = await signalsFor(target);
+  const verdict = REROUTE
+    ? await screenWithReroute(signalsFor, target, rawSignals)
+    : screen(rawSignals);
+
+  const { submissionId, verdictId } = await store.insertScreen({ target, kind, verdict, signals: verdict.signals });
+  const commit = commitVerdict(verdict);
+  const proof = await recordProof({ commit, verdictId, signals: verdict.signals });
+  await store.insertProof({ verdictId, mode: proof.mode, commit, ref: proof.ref, onChain: proof.onChain, txCount: proof.txCount || 0 });
+  return { submissionId, verdictId, verdict, proof };
+}
+
+const watcher = startWatcher({ store, signalsFor, recordProof });
+
+console.log(`SentinelVault API on :${PORT} | signal source: ${SOURCE_MODE} | proof: ${PROOF_MODE} | db: ${store.backend}`);
 
 function readBody(req) {
   return new Promise((resolve) => {
     let d = '';
     req.on('data', (c) => (d += c));
     req.on('end', () => {
-      try {
-        resolve(d ? JSON.parse(d) : {});
-      } catch {
-        resolve({});
-      }
+      try { resolve(d ? JSON.parse(d) : {}); } catch { resolve({}); }
     });
   });
 }
@@ -46,52 +69,64 @@ async function handleScreen(req, res) {
     return send(res, 422, { error: 'target_required', detail: 'POST a "target" (address or url)' });
   }
   try {
-    const rawSignals = await signalsFor(target.trim());
-    const verdict = screen(rawSignals);
-    const { submissionId, verdictId } = insertScreen(db, {
-      target: target.trim(),
-      kind,
-      verdict,
-      signals: verdict.signals,
-    });
-    const commit = commitVerdict(verdict);
-    const proof = await recordProof({ commit, verdictId, signals: verdict.signals });
-    insertProof(db, {
-      verdictId,
-      mode: proof.mode,
-      commit,
-      ref: proof.ref,
-      onChain: proof.onChain,
-      txCount: proof.txCount || 0,
-    });
-    return send(res, 200, { id: submissionId, verdictId, target, ...verdict, proof });
+    const out = await runAndRecord(target.trim(), kind);
+    deliver(store, 'verdict', { target, ...out.verdict, proof: out.proof, submissionId: out.submissionId });
+    return send(res, 200, { id: out.submissionId, verdictId: out.verdictId, target, ...out.verdict, proof: out.proof });
   } catch (err) {
     return send(res, 500, { error: 'screen_failed', detail: err.message });
   }
 }
 
-function handleGet(req, res, idStr) {
+async function handleGet(req, res, idStr) {
   const id = Number(idStr);
   if (!Number.isInteger(id)) return send(res, 400, { error: 'bad_id' });
-  const audit = getVerdictAudit(db, id);
+  const audit = await store.getVerdictAudit(id);
   if (!audit) return send(res, 404, { error: 'not_found' });
   return send(res, 200, audit);
+}
+
+async function handleWebhooks(req, res) {
+  if (req.method === 'GET') {
+    if (!checkAuth(req, res, false)) return;
+    return send(res, 200, await store.listWebhooks());
+  }
+  if (req.method === 'POST') {
+    if (!checkAuth(req, res, true)) return;
+    const body = await readBody(req);
+    if (!body.url || typeof body.url !== 'string') return send(res, 422, { error: 'url_required' });
+    const id = await addVerdictWebhook(store, { url: body.url, events: body.events || ['verdict'] });
+    return send(res, 201, { id, ok: true });
+  }
+  return send(res, 405, { error: 'method_not_allowed' });
+}
+
+async function handleWatch(req, res) {
+  if (req.method === 'GET') {
+    if (!checkAuth(req, res, false)) return;
+    return send(res, 200, await store.listWatches());
+  }
+  if (req.method === 'POST') {
+    if (!checkAuth(req, res, true)) return;
+    const body = await readBody(req);
+    if (!body.target || typeof body.target !== 'string') return send(res, 422, { error: 'target_required' });
+    const id = await store.addWatch({ target: body.target, kind: body.kind || 'token', webhookId: body.webhookId || null, intervalMin: body.intervalMin || 60 });
+    return send(res, 201, { id, ok: true });
+  }
+  return send(res, 405, { error: 'method_not_allowed' });
 }
 
 function send(res, code, obj) {
   res.writeHead(code, {
     'Content-Type': 'application/json',
     'Access-Control-Allow-Origin': '*',
-    'Access-Control-Allow-Methods': 'GET, POST, OPTIONS',
-    'Access-Control-Allow-Headers': 'Content-Type',
+    'Access-Control-Allow-Methods': 'GET, POST, DELETE, OPTIONS',
+    'Access-Control-Allow-Headers': 'Content-Type, Authorization',
   });
   res.end(JSON.stringify(obj));
 }
 
-// Serve the frontend (app/web) so a single URL hosts UI + API.
 async function serveStatic(req, res, pathname) {
   let rel = pathname === '/' ? 'index.html' : pathname.slice(1);
-  // prevent path traversal
   if (rel.includes('..') || rel.startsWith('/')) return send(res, 403, { error: 'forbidden' });
   try {
     const data = await readFile(join(WEB_DIR, rel));
@@ -104,13 +139,33 @@ async function serveStatic(req, res, pathname) {
 }
 
 const server = http.createServer(async (req, res) => {
-  if (req.method === 'OPTIONS') return send(res, 204, {});
+  if (req.method === 'OPTIONS') { res.writeHead(204); return res.end(); }
   const url = new URL(req.url, `http://localhost:${PORT}`);
   try {
-    if (url.pathname === '/health') return send(res, 200, { status: 'ok', source: SOURCE_MODE });
-    if (url.pathname === '/screen' && req.method === 'POST') return handleScreen(req, res);
+    if (url.pathname === '/health') return send(res, 200, { status: 'ok', source: SOURCE_MODE, db: store.backend });
+    if (url.pathname === '/screen' && req.method === 'POST') {
+      if (!checkAuth(req, res, true)) return;
+      return handleScreen(req, res);
+    }
+    if (url.pathname === '/webhooks') return handleWebhooks(req, res);
+    if (url.pathname === '/watch') return handleWatch(req, res);
+    const wDel = /^\/webhooks\/(\d+)$/.exec(url.pathname);
+    if (wDel && req.method === 'DELETE') {
+      if (!checkAuth(req, res, true)) return;
+      await store.deleteWebhook(Number(wDel[1]));
+      return send(res, 200, { ok: true });
+    }
+    const wtDel = /^\/watch\/(\d+)$/.exec(url.pathname);
+    if (wtDel && req.method === 'DELETE') {
+      if (!checkAuth(req, res, true)) return;
+      await store.deleteWatch(Number(wtDel[1]));
+      return send(res, 200, { ok: true });
+    }
     const subMatch = /^\/submissions\/(\d+)$/.exec(url.pathname);
-    if (subMatch && req.method === 'GET') return handleGet(req, res, subMatch[1]);
+    if (subMatch && req.method === 'GET') {
+      if (!checkAuth(req, res, false)) return;
+      return handleGet(req, res, subMatch[1]);
+    }
     if (req.method === 'GET') return serveStatic(req, res, url.pathname);
     return send(res, 404, { error: 'not_found' });
   } catch (err) {
@@ -119,3 +174,4 @@ const server = http.createServer(async (req, res) => {
 });
 
 server.listen(PORT);
+process.on('SIGTERM', () => { watcher && watcher.stop(); process.exit(0); });

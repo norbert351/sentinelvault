@@ -44,7 +44,13 @@ export async function simulatedSignals(target) {
     },
   ];
   // simulated signals carry no on-chain provenance yet
-  return signals.map((s) => ({ ...s, txHash: null }));
+  const sigs = signals.map((s) => ({ ...s, txHash: null }));
+  simulatedSignals.rerouteOne = async (intent, target) => {
+    const all = await simulatedSignals(target);
+    return all.find((s) => s.intent === intent) || { intent, confidence: 0, data: {}, txHash: null };
+  };
+  simulatedSignals.setIntent = true;
+  return sigs;
 }
 
 export async function createSignalSource(mode) {

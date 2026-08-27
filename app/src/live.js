@@ -111,39 +111,44 @@ function payFetch() {
   return _payFetch;
 }
 
-export async function liveSignals(target) {
-  const asks = Object.entries(INTENT_QUERIES).map(async ([intent, makeQuery]) => {
-    try {
-      const res = await payFetch()(ENGINE, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ query: makeQuery(target), intent }),
-      });
-      if (!res.ok) {
-        return { intent, confidence: 0, data: {}, reason: `HTTP ${res.status}`, txHash: null };
-      }
-      const body = await res.json();
-      const result = body.result ?? {};
-      const doc = parseAnswer(result);
-      const evidence = toEvidence(intent, doc);
-      // real on-chain provenance from the x402 settlement
-      let txHash = null;
-      const pr = res.headers.get('payment-response');
-      if (pr) {
-        try {
-          const b64 = pr.length % 4 ? pr + '='.repeat(4 - (pr.length % 4)) : pr;
-          const dec = JSON.parse(Buffer.from(b64, 'base64').toString());
-          txHash = dec.transaction || null;
-        } catch {}
-      }
-      const hasSignal = Object.keys(evidence).length > 0;
-      return { intent, confidence: hasSignal ? 0.85 : 0.3, data: evidence, txHash };
-    } catch (e) {
-      return { intent, confidence: 0, data: {}, txHash: null };
+export async function askIntent(intent, target) {
+  const makeQuery = INTENT_QUERIES[intent];
+  if (!makeQuery) return { intent, confidence: 0, data: {}, txHash: null };
+  try {
+    const res = await payFetch()(ENGINE, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ query: makeQuery(target), intent }),
+    });
+    if (!res.ok) return { intent, confidence: 0, data: {}, reason: `HTTP ${res.status}`, txHash: null };
+    const body = await res.json();
+    const result = body.result ?? {};
+    const doc = parseAnswer(result);
+    const evidence = toEvidence(intent, doc);
+    let txHash = null;
+    const pr = res.headers.get('payment-response');
+    if (pr) {
+      try {
+        const b64 = pr.length % 4 ? pr + '='.repeat(4 - (pr.length % 4)) : pr;
+        const dec = JSON.parse(Buffer.from(b64, 'base64').toString());
+        txHash = dec.transaction || null;
+      } catch {}
     }
-  });
+    const hasSignal = Object.keys(evidence).length > 0;
+    return { intent, confidence: hasSignal ? 0.85 : 0.3, data: evidence, txHash };
+  } catch (e) {
+    return { intent, confidence: 0, data: {}, txHash: null };
+  }
+}
+
+export async function liveSignals(target) {
+  const asks = Object.keys(INTENT_QUERIES).map(async (intent) => askIntent(intent, target));
   return Promise.all(asks);
 }
+
+// Attach a per-intent re-ask (used by the confidence-threshold re-route).
+liveSignals.rerouteOne = async (intent, target) => askIntent(intent, target);
+liveSignals.setIntent = true; // marker: this source supports per-intent re-ask
 
 export function createSignalSource(mode) {
   if (mode === 'live') return liveSignals;

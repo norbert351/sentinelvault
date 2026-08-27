@@ -1,0 +1,10 @@
+{
+  "name": "@sentinelvault/sdk",
+  "version": "0.1.0",
+  "description": "SentinelVault B2B SDK — treasury & partner vetting on ranked, verified Telegraph intelligence by intent.",
+  "type": "module",
+  "main": "index.js",
+  "exports": { ".": "./index.js" },
+  "scripts": { "test": "node test.js" },
+  "engines": { "node": ">=18" }
+}

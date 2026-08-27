@@ -30,8 +30,23 @@ multiple intents, fusing the answers into a weighted risk verdict with an on-cha
 
 **`PROOF_MODE` seam:**
 - `logging` → records the verdict digest + real per-signal x402 tx hashes (on-chain provenance
-  when present). Ready to replay as a single on-chain digest.
-- `erc8183` → (route reserved) bind the digest via ERC-8183 `createJob` on the Diamond.
+  when present).
+- `erc8183` → binds the whole verdict digest on-chain via ERC-8183 `createJob` (approve →
+  deposit escrow → createJob, `app/src/erc8183.js`). Auto-falls back to x402-tx proof on chain
+  error so a transient RPC issue never blocks a verdict.
+
+### App feature set (matches the architecture diagram)
+
+| Feature | Endpoint / file | Status |
+|---|---|---|
+| Submission API + verdict | `POST /screen`, `GET /submissions/:id` | ✅ |
+| Confidence-threshold re-route | `screenWithReroute` (`reroute.js`) — low-confidence high-weight intents re-asked once | ✅ |
+| Auth (Bearer) | `auth.js` — `SENTINEL_API_KEY`; `SENTINEL_ANON_READONLY=1` opens for judging | ✅ |
+| Webhook callbacks | `POST /webhooks`, `GET /webhooks`, `DELETE /webhooks/:id` → `webhook.js` | ✅ |
+| Auto Watcher | `POST /watch`, `GET /watch`, `DELETE /watch/:id` → `watcher.js` (scheduled re-screens) | ✅ |
+| B2B SDK | `app/sdk/` (`@sentinelvault/sdk`, `SentinelVault` client) | ✅ |
+| Postgres (Neon) storage | `SENTINEL_DATABASE_URL` → `pg` backend; else node:sqlite | ✅ |
+| On-chain ERC-8183 digest | `PROOF_MODE=erc8183` → `erc8183.js` | ✅ |
 
 ### Run (live)
 
@@ -46,15 +61,25 @@ npm start                            # starts on $PORT or :8090
 Then:
 
 ```bash
-# verdict on a contract/token
+# verdict on a contract/token (add -H 'Authorization: Bearer <key>' if SENTINEL_API_KEY set)
 curl -X POST localhost:8090/screen -H 'Content-Type: application/json' \
   -d '{"target":"0x…","kind":"token"}'
 
 # full audit trail (verdict + per-signal evidence + on-chain tx hashes)
 curl localhost:8090/submissions/1
+
+# B2B SDK
+cd app/sdk && SV_BASE=http://localhost:8090 node test.js
+
+# register a callback + auto-watch a target
+curl -X POST localhost:8090/webhooks -H 'Content-Type: application/json' \
+  -d '{"url":"https://your-service/hook","events":["verdict"]}'
+curl -X POST localhost:8090/watch -H 'Content-Type: application/json' \
+  -d '{"target":"0x…","kind":"token","intervalMin":60}'
 ```
 
-Frontend: `app/web/index.html` — open with `?api=<backend-url>` to point at the API.
+Frontend + API share one origin: `GET /` serves `app/web/index.html`, `POST /screen` and
+`/submissions/:id` are the same host — no separate static host or CORS needed.
 
 ### Verified live behaviors (Base Sepolia, 2026-08)
 
@@ -65,7 +90,7 @@ Frontend: `app/web/index.html` — open with `?api=<backend-url>` to point at th
 
 ## Stack
 
-- **Backend:** Node 22 ESM, `node:sqlite`, `@x402/fetch` + `@x402/evm` (EIP-3009),
-  `viem`. Zero heavy frameworks.
-- **Frontend:** single `index.html`, mobile-first, no build step.
+- **Backend:** Node 22 ESM, `@x402/fetch` + `@x402/evm` (EIP-3009), `viem`. Zero heavy frameworks.
+- **Storage:** Postgres/Neon via `SENTINEL_DATABASE_URL`, or bundled `node:sqlite` for dev.
+- **Frontend:** single `index.html`, mobile-first, served same-origin by the API (no build step, no CORS).
 - **Network:** Base Sepolia (84532) — Diamond `0x5a23…ff8` receives x402 USDC payments.

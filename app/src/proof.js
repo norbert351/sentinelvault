@@ -26,13 +26,11 @@ export function commitVerdict(verdict) {
 
 export function createRecorder(mode = 'logging') {
   if (mode === 'erc8183') {
-    // Live path: deposit USDC to escrow then createJob(bytes32,intentId,...)
-    // with a callback that stores the digest. Needs keys + funded escrow.
-    return async function recordErc8183({ commit }) {
-      throw new Error(
-        `erc8183 record needs USDC escrow + keys (commit ${commit.slice(0, 18)}…). ` +
-          'Keep PROOF_MODE=logging until the escrow is funded.'
-      );
+    // Live path: deposit USDC to escrow then createJob(intentId, OnChainData, callback),
+    // binding the verdict digest on-chain (requires SENTINEL_PK + funded escrow).
+    return async function recordErc8183(...args) {
+      const mod = await import('./erc8183.js');
+      return mod.createErc8183Recorder()(...args);
     };
   }
   return async function recordLogging({ commit, verdictId, signals = [] }) {
