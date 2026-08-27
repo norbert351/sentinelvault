@@ -75,11 +75,17 @@ function handleGet(req, res, idStr) {
 }
 
 function send(res, code, obj) {
-  res.writeHead(code, { 'Content-Type': 'application/json' });
+  res.writeHead(code, {
+    'Content-Type': 'application/json',
+    'Access-Control-Allow-Origin': '*',
+    'Access-Control-Allow-Methods': 'GET, POST, OPTIONS',
+    'Access-Control-Allow-Headers': 'Content-Type',
+  });
   res.end(JSON.stringify(obj));
 }
 
 const server = http.createServer(async (req, res) => {
+  if (req.method === 'OPTIONS') return send(res, 204, {});
   const url = new URL(req.url, `http://localhost:${PORT}`);
   try {
     if (url.pathname === '/health') return send(res, 200, { status: 'ok', source: SOURCE_MODE });
