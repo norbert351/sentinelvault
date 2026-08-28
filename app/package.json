@@ -7,7 +7,7 @@
   "main": "src/server.js",
   "scripts": {
     "start": "node --dns-result-order=ipv4first src/server.js",
-    "test": "node --test src/*.test.js",
+    "test": "node --test src/*.test.js"
   },
   "engines": {
     "node": ">=22"
