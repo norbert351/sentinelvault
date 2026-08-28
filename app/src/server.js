@@ -21,6 +21,7 @@ import { openStore } from './storage.js';
 import { checkAuth } from './auth.js';
 import { deliver, addVerdictWebhook } from './webhook.js';
 import { startWatcher } from './watcher.js';
+import { buildChallenge, verifyPayment, send402, PAY_TO, PRICE_USDC, CHAIN_ID } from './payment-gate.js';
 
 const __dir = dirname(fileURLToPath(import.meta.url));
 const WEB_DIR = join(__dir, '..', 'web');
@@ -29,6 +30,7 @@ const PORT = process.env.PORT || 8090;
 const SOURCE_MODE = process.env.SIGNAL_SOURCE === 'live' ? 'live' : 'simulated';
 const PROOF_MODE = process.env.PROOF_MODE === 'erc8183' ? 'erc8183' : 'logging';
 const REROUTE = process.env.SENTINEL_REROUTE !== '0';
+const PAYWALL = process.env.SENTINEL_PAYWALL !== '0'; // 0 disables the 402 gate (dev)
 
 const store = await openStore();
 const signalsFor = await createSignalSource(SOURCE_MODE);
@@ -67,6 +69,17 @@ async function handleScreen(req, res) {
   const { target, kind = 'token' } = body;
   if (!target || typeof target !== 'string' || !target.trim()) {
     return send(res, 422, { error: 'target_required', detail: 'POST a "target" (address or url)' });
+  }
+  // Paid endpoint: require a valid PAYMENT-SIGNATURE unless the gate is disabled.
+  if (PAYWALL) {
+    const challenged = buildChallenge('/screen');
+    const sigHeader = req.headers['payment-signature'];
+    try {
+      if (!sigHeader) throw { code: 'payment_required' };
+      await verifyPayment(sigHeader); // throws {code,detail} on any failure
+    } catch (e) {
+      return send402(res, challenged, { code: e && e.code, detail: e && e.detail });
+    }
   }
   try {
     const out = await runAndRecord(target.trim(), kind);
@@ -120,7 +133,7 @@ function send(res, code, obj) {
     'Content-Type': 'application/json',
     'Access-Control-Allow-Origin': '*',
     'Access-Control-Allow-Methods': 'GET, POST, DELETE, OPTIONS',
-    'Access-Control-Allow-Headers': 'Content-Type, Authorization',
+    'Access-Control-Allow-Headers': 'Content-Type, Authorization, PAYMENT-SIGNATURE',
   });
   res.end(JSON.stringify(obj));
 }
@@ -142,9 +155,14 @@ const server = http.createServer(async (req, res) => {
   if (req.method === 'OPTIONS') { res.writeHead(204); return res.end(); }
   const url = new URL(req.url, `http://localhost:${PORT}`);
   try {
-    if (url.pathname === '/health') return send(res, 200, { status: 'ok', source: SOURCE_MODE, db: store.backend });
+    if (url.pathname === '/health') return send(res, 200, { status: 'ok', source: SOURCE_MODE, db: store.backend, paywall: PAYWALL, priceUsdc: PRICE_USDC, payTo: PAY_TO, chainId: CHAIN_ID });
+    if (url.pathname === '/screen/quote' && req.method === 'GET') {
+      // Expose the payment challenge + metadata so the wallet modal can drive it.
+      const ch = JSON.parse(Buffer.from(buildChallenge('/screen'), 'base64').toString());
+      return send(res, 200, { requiresPayment: PAYWALL, challenge: ch, payTo: PAY_TO, priceUsdc: PRICE_USDC, chainId: CHAIN_ID });
+    }
     if (url.pathname === '/screen' && req.method === 'POST') {
-      if (!checkAuth(req, res, true)) return;
+      // Payment is the authorization for /screen (paywall) — API key not required here.
       return handleScreen(req, res);
     }
     if (url.pathname === '/webhooks') return handleWebhooks(req, res);

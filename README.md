@@ -47,6 +47,7 @@ multiple intents, fusing the answers into a weighted risk verdict with an on-cha
 | B2B SDK | `app/sdk/` (`@sentinelvault/sdk`, `SentinelVault` client) | ✅ |
 | Postgres (Neon) storage | `SENTINEL_DATABASE_URL` → `pg` backend; else node:sqlite | ✅ |
 | On-chain ERC-8183 digest | `PROOF_MODE=erc8183` → `erc8183.js` | ✅ |
+| **Paid API (Option A)** | `SENTINEL_PAYWALL` (default on) → `/screen` returns 402, requester's wallet pays USDC + signs EIP-712, replays for the verdict. `payment-gate.js` verifies amount/chainId/payTo + on-chain settlement + replay protection. | ✅ verified e2e |
 
 ### Run (live)
 
@@ -64,6 +65,12 @@ Then:
 # verdict on a contract/token (add -H 'Authorization: Bearer <key>' if SENTINEL_API_KEY set)
 curl -X POST localhost:8090/screen -H 'Content-Type: application/json' \
   -d '{"target":"0x…","kind":"token"}'
+# → returns 402 with a PAYMENT-REQUIRED challenge (payable /screen)
+
+# the wallet modal (app/web) handles the flow: connect → USDC transfer to payTo →
+# sign EIP-712 → replay with PAYMENT-SIGNATURE header → verdict.
+# E2E reference (real on-chain payment through the gate):
+cd app && SENTINEL_PK=0x… SV_API=http://localhost:8090 node e2e_paywall.mjs
 
 # full audit trail (verdict + per-signal evidence + on-chain tx hashes)
 curl localhost:8090/submissions/1

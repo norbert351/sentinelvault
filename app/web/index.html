@@ -48,6 +48,29 @@
   .proof{font-size:11px;color:var(--dim);word-break:break-all;margin-top:4px}
   .proof b{color:var(--mut)}
   .err{color:var(--bad);font-size:13px;padding:10px 0}
+  .btn{background:var(--acc);color:#020617;font-weight:800;border:none;border-radius:10px;padding:11px 14px;font:inherit;font-size:13px;cursor:pointer}
+  .btn.ghost{background:transparent;color:var(--mut);border:1px solid var(--line)}
+  .btn[disabled]{opacity:.5;cursor:default}
+  /* wallet modal */
+  .modal{position:fixed;inset:0;background:rgba(2,6,23,.8);backdrop-filter:blur(4px);display:flex;align-items:center;justify-content:center;z-index:50;padding:16px}
+  .modal-box{max-width:420px;width:100%;background:var(--panel);border:1px solid var(--line);border-radius:16px;padding:22px;box-shadow:0 20px 60px rgba(0,0,0,.5)}
+  .modal h2{font-size:16px;margin-bottom:4px}
+  .modal .sub{color:var(--mut);font-size:12px;margin-bottom:16px}
+  .pay-row{display:flex;justify-content:space-between;align-items:center;font-size:13px;margin:10px 0}
+  .pay-row .amt{font-size:22px;font-weight:800;color:var(--acc)}
+  .pay-row .to{color:var(--dim);font-size:11px;word-break:break-all}
+  .steps{list-style:none;margin:14px 0}
+  .steps li{display:flex;align-items:center;gap:10px;font-size:12px;padding:4px 0;color:var(--mut)}
+  .steps li.done{color:var(--ok)}
+  .steps li.act{color:var(--tx);font-weight:700}
+  .steps .n{width:18px;height:18px;border-radius:50%;border:1px solid var(--line);display:flex;align-items:center;justify-content:center;font-size:10px;flex-shrink:0}
+  .steps li.done .n{background:rgba(52,211,153,.2);border-color:var(--ok)}
+  .steps li.act .n{background:var(--acc);border-color:var(--acc);color:#020617}
+  .spinner{width:14px;height:14px;border:2px solid var(--line);border-top-color:var(--acc);border-radius:50%;animation:spin .7s linear infinite;display:inline-block}
+  @keyframes spin{to{transform:rotate(360deg)}}
+  .modal-actions{display:flex;justify-content:flex-end;gap:10px;margin-top:8px}
+  .conn{display:flex;align-items:center;gap:8px;font-size:11px;color:var(--mut)}
+  .conn .addr{color:var(--acc)}
   @media(min-width:560px){.form{flex-direction:row}.form input{flex:2}.form .row{flex:3} }
 </style>
 </head>
@@ -92,23 +115,134 @@
   </div>
 
   <div id="err" class="err hide"></div>
+
+  <!-- wallet connection indicator -->
+  <div class="conn" id="conn" style="justify-content:flex-end;margin-bottom:12px">
+    <span id="connlabel" class="hide">wallet <b class="addr" id="connaddr"></b></span>
+  </div>
 </div>
 
+<!-- payment / wallet modal -->
+<div id="modal" class="modal hide">
+  <div class="modal-box">
+    <h2 id="mh">Connect wallet to verify</h2>
+    <div class="sub" id="msub">Pay to run this target through live miners.</div>
+    <div class="pay-row"><div><div style="color:var(--mut);font-size:11px">Price</div><div class="amt" id="mamt">—</div></div></div>
+    <div class="pay-row" style="flex-direction:column;align-items:flex-start;gap:2px"><div style="color:var(--mut);font-size:11px">Pay to</div><div class="to" id="mto">—</div></div>
+    <ul class="steps" id="msteps"></ul>
+    <div class="modal-actions">
+      <button class="btn ghost" id="mcancel" type="button">Cancel</button>
+      <button class="btn" id="mpay" type="button">Connect &amp; Pay</button>
+    </div>
+  </div>
+</div>
+
+<script src="https://cdn.jsdelivr.net/npm/ethers@6/dist/ethers.min.js"></script>
 <script>
 const API = new URLSearchParams(location.search).get('api') || '';
 const colon = (x)=>x==null?'—':x;
 
 function riskPill(r){ r=Number(r)||0; return r>=0.7?'hi':r>=0.4?'mid':'lo'; }
 function colorFor(v){ return v==='APPROVE'?'ok':v==='BLOCK'?'bad':'warn'; }
+const result=()=>document.getElementById('result'), err=()=>document.getElementById('err');
+const show=e=>e.classList.remove('hide'), hide=e=>e.classList.add('hide');
 
+// ---- EIP-712 payment types (must match server) ----
+const DOMAIN=(c)=>({name:'x402',version:'2',chainId:Number(c.chainId)});
+const TYPES={Payment:[
+  {name:'scheme',type:'string'},{name:'network',type:'string'},{name:'chainId',type:'uint256'},
+  {name:'asset',type:'address'},{name:'amount',type:'string'},{name:'payTo',type:'address'},
+  {name:'maxTimeoutSeconds',type:'uint256'},{name:'description',type:'string'},{name:'extra',type:'string'},
+]};
+const msgOf=(a)=>({
+  scheme: a.scheme, network: `eip155:${a.chainId}`, chainId: BigInt(a.chainId),
+  asset: a.asset, amount: String(a.amount), payTo: a.payTo,
+  maxTimeoutSeconds: BigInt(a.maxTimeoutSeconds), description: a.description||'',
+  extra: typeof a.extra==='string'?a.extra:JSON.stringify(a.extra||{}),
+});
+
+// ---- wallet state ----
+let provider=null, signer=null, payer=null;
+async function ensureWallet(){
+  if(signer) return signer;
+  if(!window.ethereum) throw new Error('No injected wallet. Install a wallet like MetaMask or Rabby and add Base Sepolia.');
+  provider=new ethers.BrowserProvider(window.ethereum);
+  const accts=await provider.send('eth_requestAccounts',[]);
+  signer=await provider.getSigner();
+  payer=(await signer.getAddress()).toLowerCase();
+  const cl=document.getElementById('connlabel');
+  show(cl); document.getElementById('connaddr').textContent=payer.slice(0,6)+'…'+payer.slice(-4);
+  return signer;
+}
+
+// ---- payment modal ----
+const modal=()=>document.getElementById('modal');
+const STEPS=['Connect wallet','Pay USDC on-chain','Sign proof','Verdict'];
+function stepUI(i,state){
+  const ul=document.getElementById('msteps');
+  ul.innerHTML=STEPS.map((s,idx)=>`<li class="${idx<i?'done':idx===i?(state==='run'?'act':''):''}"><span class="n">${idx<i?'✓':idx+1}</span> ${s}${idx===i&&state==='run'?' <span class="spinner"></span>':''}</li>`).join('');
+}
+function setPay(quote){
+  const a=quote.challenge.accepts[0];
+  document.getElementById('mamt').textContent='$'+quote.priceUsdc+' USDC';
+  document.getElementById('mto').textContent=a.payTo;
+  stepUI(0,'');
+}
+let pendingTarget=null, pendingKind=null;
+
+// ---- paid screen: probe -> quote -> modal -> connect -> pay -> sign -> replay ----
 async function screen(target, kind){
   hide(err()); hide(result());
-  const res = await fetch(API+'/screen',{method:'POST',headers:{'Content-Type':'application/json'},
-    body:JSON.stringify({target,kind})});
-  const data = await res.json();
-  if(!res.ok) throw new Error(data.detail||data.error||'request failed');
-  render(data);
+  // 1. quote (does the server require payment?)
+  const q = await (await fetch(API+'/screen/quote')).json();
+  if(!q.requiresPayment){
+    const res=await fetch(API+'/screen',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({target,kind})});
+    const data=await res.json();
+    if(!res.ok) throw new Error(data.detail||data.error||'failed');
+    return render(data);
+  }
+  // 2. open modal, capture target for replay
+  pendingTarget=target; pendingKind=kind;
+  setPay(q);
+  show(modal());
 }
+
+// Connect & Pay button
+document.getElementById('mpay').addEventListener('click', async ()=>{
+  const btn=document.getElementById('mpay'); btn.disabled=true;
+  try{
+    const q=await(await fetch(API+'/screen/quote')).json();
+    const accepted=q.challenge.accepts[0];
+    // connect
+    stepUI(0,'run');
+    await ensureWallet();
+    stepUI(1,'');
+    // pay: transfer USDC on-chain to payTo
+    const usdc=new ethers.Contract(accepted.asset,['function transfer(address,uint256) returns (bool)'],signer);
+    const tx=await usdc.transfer(accepted.payTo,BigInt(accepted.amount));
+    await tx.wait();
+    stepUI(2,'');
+    // sign EIP-712 proof
+    const sig=await signer.signTypedData(DOMAIN(accepted),TYPES,msgOf(accepted));
+    // replay with header
+    stepUI(3,'run');
+    const header=btoa(JSON.stringify({accepted,signature:sig,payer}));
+    const res=await fetch(API+'/screen',{method:'POST',
+      headers:{'Content-Type':'application/json','PAYMENT-SIGNATURE':header},
+      body:JSON.stringify({target:pendingTarget,kind:pendingKind})});
+    const data=await res.json();
+    if(!res.ok) throw new Error(data.detail||data.error||'payment/request failed');
+    hide(modal());
+    stepUI(4,'');
+    render(data);
+  }catch(x){
+    document.getElementById('msub').textContent='Error: '+(x&&x.message||x);
+    hide(modal());
+    hide(result()); err().textContent='Error: '+(x&&x.message||x); show(err());
+  }finally{ btn.disabled=false; }
+});
+document.getElementById('mcancel').addEventListener('click',()=>{hide(modal()); stepUI(0,'');});
+
 function render(d){
   show(result());
   const $=id=>document.getElementById(id);
@@ -127,8 +261,6 @@ function render(d){
     (p.ref?'<b>ref</b> '+p.ref+'<br>':'')+(p.detail||'');
   $('err').classList.add('hide');
 }
-const result=()=>document.getElementById('result'), err=()=>document.getElementById('err');
-const show=e=>e.classList.remove('hide'), hide=e=>e.classList.add('hide');
 document.getElementById('form').addEventListener('submit',e=>{
   e.preventDefault(); const t=document.getElementById('target').value.trim();
   if(!t) return; const k=document.getElementById('kind').value;
