@@ -138,8 +138,14 @@ function send(res, code, obj) {
   res.end(JSON.stringify(obj));
 }
 
+// Serve the frontend (app/web) so a single URL hosts UI + API.
+// Routing: /  = marketing landing, /app = the live screening product.
 async function serveStatic(req, res, pathname) {
-  let rel = pathname === '/' ? 'index.html' : pathname.slice(1);
+  let rel;
+  if (pathname === '/') rel = 'landing.html';
+  else if (pathname === '/app') rel = 'app.html';
+  else rel = pathname.slice(1);
+  // prevent path traversal
   if (rel.includes('..') || rel.startsWith('/')) return send(res, 403, { error: 'forbidden' });
   try {
     const data = await readFile(join(WEB_DIR, rel));

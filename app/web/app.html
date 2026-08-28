@@ -71,10 +71,22 @@
   .modal-actions{display:flex;justify-content:flex-end;gap:10px;margin-top:8px}
   .conn{display:flex;align-items:center;gap:8px;font-size:11px;color:var(--mut)}
   .conn .addr{color:var(--acc)}
+  /* shared product header */
+  .topnav{display:flex;align-items:center;justify-content:space-between;width:100%;max-width:720px;margin:0 auto 20px;padding:14px 0;border-bottom:1px solid var(--line)}
+  .topnav .tb{display:flex;align-items:center;gap:10px;color:var(--tx);font-weight:700;text-decoration:none}
+  .topnav .tb .mark{width:26px;height:26px;border-radius:7px;background:var(--acc);color:#020617;display:grid;place-items:center;font-size:12px}
+  .topnav .nl{display:flex;align-items:center;gap:16px}
+  .topnav .nl a{color:var(--mut);font-size:12.5px;text-decoration:none}
+  .topnav .nl a:hover{color:var(--tx)}
+  .topnav .nl .pill{font-size:11px;background:rgba(34,211,238,.15);color:var(--acc);border-radius:999px;padding:3px 10px;font-weight:600}
   @media(min-width:560px){.form{flex-direction:row}.form input{flex:2}.form .row{flex:3} }
 </style>
 </head>
 <body>
+<div class="topnav">
+  <a class="tb" href="/"><span class="mark">◈</span>SentinelVault</a>
+  <div class="nl"><a href="/">Landing</a><span class="pill">Live app</span></div>
+</div>
 <div class="wrap">
   <header><div class="dot"></div><div><h1>SentinelVault</h1><div class="tag">Treasury &amp; partner vetting on verified on-chain intelligence</div></div></header>
 
