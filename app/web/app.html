@@ -71,6 +71,31 @@
   .modal-actions{display:flex;justify-content:flex-end;gap:10px;margin-top:8px}
   .conn{display:flex;align-items:center;gap:8px;font-size:11px;color:var(--mut)}
   .conn .addr{color:var(--acc)}
+  /* presets */
+  .presets{display:flex;gap:8px;flex-wrap:wrap;margin-top:12px}
+  .preset{background:#020617;border:1px solid var(--line);color:var(--mut);border-radius:999px;padding:6px 13px;font:inherit;font-size:12px;cursor:pointer;transition:border-color .15s,color .15s}
+  .preset:hover{border-color:var(--acc);color:var(--tx)}
+  /* watchlist dashboard */
+  .watch-card{background:var(--panel);border:1px solid var(--line);border-radius:14px;padding:16px}
+  .watch-head{display:flex;align-items:center;justify-content:space-between;margin-bottom:12px}
+  .watch-head .wh{font-size:11px;color:var(--mut);text-transform:uppercase;letter-spacing:.06em;font-weight:600}
+  .watch-add{display:flex;gap:8px}
+  .watch-add input{flex:1}
+  .watch-add input,.watch-add select{background:#020617;border:1px solid var(--line);color:var(--tx);border-radius:8px;padding:9px 11px;font:inherit;font-size:12.5px}
+  .watch-add button{padding:9px 14px;font-size:12.5px}
+  .wrow{display:flex;align-items:center;gap:12px;padding:10px 0;border-bottom:1px solid #111a2e;font-size:12.5px}
+  .wrow:last-child{border-bottom:none}
+  .wrow .wtgt{flex:1;word-break:break-all;color:var(--tx)}
+  .wrow .wkind{font-family:var(--mono);font-size:11px;color:var(--dim);text-transform:uppercase}
+  .wrow .wint{font-family:var(--mono);font-size:11px;color:var(--dim)}
+  .wrow .wv{font-size:11px;font-weight:700;padding:3px 8px;border-radius:6px}
+  .wrow .wv.APPROVE{background:rgba(52,211,153,.16);color:var(--ok)}
+  .wrow .wv.FLAG{background:rgba(251,191,36,.16);color:var(--warn)}
+  .wrow .wv.BLOCK{background:rgba(251,113,133,.16);color:var(--bad)}
+  .wrow .wv.none{background:#111a2e;color:var(--dim)}
+  .wrow .wdel{background:none;border:none;color:var(--dim);cursor:pointer;font-size:14px;padding:4px}
+  .wrow .wdel:hover{color:var(--bad)}
+  .empty{color:var(--dim);font-size:12.5px;padding:10px 0;text-align:center}
   /* shared product header */
   .topnav{display:flex;align-items:center;justify-content:space-between;width:100%;max-width:720px;margin:0 auto 20px;padding:14px 0;border-bottom:1px solid var(--line)}
   .topnav .tb{display:flex;align-items:center;gap:10px;color:var(--tx);font-weight:700;text-decoration:none}
@@ -99,6 +124,30 @@
       </select>
       <button type="submit">Screen</button></div>
     </form>
+    <div class="presets">
+      <span style="font-size:11px;color:var(--dim);align-self:center">Try:</span>
+      <button type="button" class="preset" data-t="0xdeadbeefdeadbeefdeadbeefdeadbeefdeadbeef" data-k="token">⚠️ likely scam</button>
+      <button type="button" class="preset" data-t="0x28C6c06298d514Db089934071355E5743bf21d60" data-k="token">✅ known token</button>
+      <button type="button" class="preset" data-t="CVE-2021-44228" data-k="cve">⚠️ critical CVE</button>
+      <button type="button" class="preset" data-t="https://scam-defi-honeypot.example/claim-a1b2" data-k="url">🌐 scam URL</button>
+    </div>
+  </div>
+
+  <div class="card watch-card">
+    <div class="watch-head">
+      <span class="wh">📋 Watchlist — auto re-screen</span>
+      <button class="btn ghost" id="wrefresh" type="button">⟳ Refresh</button>
+    </div>
+    <div class="watch-add">
+      <input type="text" id="wtarget" placeholder="add a target to watch (address/url/cve)" autocomplete="off">
+      <select id="wkind">
+        <option value="token">token</option><option value="contract">contract</option>
+        <option value="url">url</option><option value="cve">cve</option>
+      </select>
+      <button type="button" id="wadd">Watch</button>
+    </div>
+    <div class="sec" style="margin-top:6px">Monitored targets</div>
+    <div id="wlist"></div>
   </div>
 
   <div id="result" class="hide">
@@ -278,6 +327,53 @@ document.getElementById('form').addEventListener('submit',e=>{
   if(!t) return; const k=document.getElementById('kind').value;
   screen(t,k).catch(x=>{ hide(result()); err().textContent='Error: '+x.message; show(err()); });
 });
+
+// ---- try-example presets: fill + screen with one click ----
+document.querySelectorAll('.preset').forEach((p)=>{
+  p.addEventListener('click',()=>{
+    document.getElementById('target').value=p.dataset.t;
+    document.getElementById('kind').value=p.dataset.k;
+    screen(p.dataset.t,p.dataset.k).catch(x=>{ hide(result()); err().textContent='Error: '+x.message; show(err()); });
+  });
+});
+
+// ---- watchlist dashboard ----
+const wlist=()=>document.getElementById('wlist');
+async function loadWatchlist(){
+  try{
+    const res=await fetch(API+'/watch/status');
+    const data=await res.json();
+    if(!Array.isArray(data)){ wlist().innerHTML='<div class="empty">unavailable</div>'; return; }
+    if(!data.length){ wlist().innerHTML='<div class="empty">No targets being watched yet. Add one above to auto re-screen it on a schedule.</div>'; return; }
+    wlist().innerHTML=data.map(w=>{
+      const v=w.latestVerdict;
+      const badge=v?`<span class="wv ${v.verdict}">${v.verdict}<span style="opacity:.6;margin-left:4px">${v.riskScore}</span></span>`:`<span class="wv none">pending</span>`;
+      const when=v?new Date(v.at).toLocaleString():'—';
+      return `<div class="wrow"><span class="wtgt">${w.target}</span>
+        <span class="wkind">${w.kind}</span>
+        <span class="wint">${w.intervalMin}m</span>
+        ${badge}
+        <span class="wint" title="${when}">${when.slice(-9)}</span>
+        <button class="wdel" data-id="${w.id}" title="stop watching">✕</button></div>`;
+    }).join('');
+    wlist().querySelectorAll('.wdel').forEach(b=>b.addEventListener('click',async()=>{
+      await fetch(API+'/watch/'+b.dataset.id,{method:'DELETE'});
+      loadWatchlist();
+    }));
+  }catch{ wlist().innerHTML='<div class="empty">Could not load watchlist.</div>'; }
+}
+document.getElementById('wadd').addEventListener('click',async()=>{
+  const tgt=document.getElementById('wtarget').value.trim();
+  if(!tgt) return;
+  const kind=document.getElementById('wkind').value;
+  await fetch(API+'/watch',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({target:tgt,kind})});
+  document.getElementById('wtarget').value='';
+  loadWatchlist();
+});
+document.getElementById('wtarget').addEventListener('keydown',e=>{ if(e.key==='Enter') document.getElementById('wadd').click(); });
+document.getElementById('wrefresh').addEventListener('click',loadWatchlist);
+loadWatchlist();
+
 // demo auto-run: use ?demo=1 to render a real verdict on load (for screenshots / QA)
 if (new URLSearchParams(location.search).get('demo')) {
   document.getElementById('target').value='0xdeadbeef...scam-honeypot';

@@ -149,6 +149,19 @@ function sqliteStore(dbPath) {
     async deleteWatch(id) { run('DELETE FROM watchlist WHERE id = ?', id); },
     async flagWatchRunning(id, at) { run('UPDATE watchlist SET last_run_at = ? WHERE id = ?', at, id); },
     async pendingWatches() { return all('SELECT * FROM watchlist WHERE status = ?', 'active'); },
+    // watch list joined with each target's latest verdict (for the dashboard)
+    async watchStatus() {
+      const rows = all('SELECT * FROM watchlist WHERE status = ?', 'active');
+      const out = [];
+      for (const w of rows) {
+        const v = get(`
+          SELECT v.verdict, v.risk_score, v.confidence, v.created_at
+          FROM verdicts v JOIN submissions s ON s.id = v.submission_id
+          WHERE s.target = ? ORDER BY v.id DESC LIMIT 1`, w.target);
+        out.push({ id: w.id, target: w.target, kind: w.kind, intervalMin: w.interval_min, lastRunAt: w.last_run_at, createdAt: w.created_at, latestVerdict: v ? { verdict: v.verdict, riskScore: v.risk_score, confidence: v.confidence, at: v.created_at } : null });
+      }
+      return out;
+    },
     async close() { db.close(); },
     get backend() { return 'sqlite'; },
   };
@@ -218,6 +231,19 @@ async function pgStore(databaseUrl) {
     async deleteWatch(id) { await q('DELETE FROM watchlist WHERE id=$1', [id]); },
     async flagWatchRunning(id, at) { await q('UPDATE watchlist SET last_run_at=$2 WHERE id=$1', [id, at]); },
     async pendingWatches() { const r = await q("SELECT * FROM watchlist WHERE status='active'"); return r.rows; },
+    async watchStatus() {
+      const ws = await q("SELECT * FROM watchlist WHERE status='active'");
+      const out = [];
+      for (const w of ws.rows) {
+        const v = await q(
+          `SELECT v.verdict, v.risk_score, v.confidence, v.created_at
+           FROM verdicts v JOIN submissions s ON s.id = v.submission_id
+           WHERE s.target=$1 ORDER BY v.id DESC LIMIT 1`, [w.target]);
+        const row = v.rows[0];
+        out.push({ id: w.id, target: w.target, kind: w.kind, intervalMin: w.interval_min, lastRunAt: w.last_run_at, createdAt: w.created_at, latestVerdict: row ? { verdict: row.verdict, riskScore: row.risk_score, confidence: row.confidence, at: row.created_at } : null });
+      }
+      return out;
+    },
     async close() { await client.end(); },
     get backend() { return 'postgres'; },
   };

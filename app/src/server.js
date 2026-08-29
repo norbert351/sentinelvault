@@ -172,6 +172,10 @@ const server = http.createServer(async (req, res) => {
       return handleScreen(req, res);
     }
     if (url.pathname === '/webhooks') return handleWebhooks(req, res);
+    if (url.pathname === '/watch/status' && req.method === 'GET') {
+      if (!checkAuth(req, res, false)) return;
+      return send(res, 200, await store.watchStatus());
+    }
     if (url.pathname === '/watch') return handleWatch(req, res);
     const wDel = /^\/webhooks\/(\d+)$/.exec(url.pathname);
     if (wDel && req.method === 'DELETE') {
