@@ -155,10 +155,15 @@ function sqliteStore(dbPath) {
 }
 
 // ------------------- Postgres (Neon) backend -------------------
+// Uses a dedicated schema (default `sentinelvault`) so it never collides with
+// other projects sharing the same Neon database. Override with SENTINEL_PG_SCHEMA.
 async function pgStore(databaseUrl) {
   const { default: pg } = await import('pg');
+  const schema = process.env.SENTINEL_PG_SCHEMA || 'sentinelvault';
   const client = new pg.Client({ connectionString: databaseUrl });
   await client.connect();
+  await client.query(`CREATE SCHEMA IF NOT EXISTS ${schema}`);
+  await client.query(`SET search_path TO ${schema}`);
   await client.query(`
     CREATE TABLE IF NOT EXISTS submissions (id SERIAL PRIMARY KEY, target TEXT NOT NULL, kind TEXT NOT NULL, created_at TIMESTAMPTZ DEFAULT now());
     CREATE TABLE IF NOT EXISTS verdicts (id SERIAL PRIMARY KEY, submission_id INT REFERENCES submissions(id), verdict TEXT NOT NULL, risk_score INT NOT NULL, confidence INT NOT NULL, reasons_json TEXT, created_at TIMESTAMPTZ DEFAULT now());
