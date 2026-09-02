@@ -5,6 +5,9 @@
   "type": "module",
   "description": "CVE_LOOKUP miner data service for the Telegraph protocol. Wraps the free CIRCL CVE API (no key needed) into a normalized, cacheable signal.",
   "main": "index.js",
+  "dependencies": {
+    "pg": "^8.23.0"
+  },
   "scripts": {
     "start": "node index.js"
   },

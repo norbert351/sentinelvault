@@ -15,6 +15,10 @@ services:
     envVars:
       - key: NODE_VERSION
         value: 22.13.0
+      # Durable request counters (survive free-tier restart). Same Neon store the app
+      # writes to; set its connection string as a secret in the Render dashboard.
+      - key: SENTINEL_DATABASE_URL
+        sync: false
 
   - type: web
     name: sentinelvault-app

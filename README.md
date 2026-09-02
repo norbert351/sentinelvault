@@ -95,6 +95,15 @@ Frontend + API share one origin: `GET /` serves `app/web/index.html`, `POST /scr
 - Benign contract → **APPROVE** (risk 5, all clean), proof `onChain: true`, `txCount: 5`.
 - Each screen settles ~$0.01–0.05 USDC on-chain through real Telegraph miners.
 
+### Durable miner request counters (Track 1 volume / cash-prize guardrail)
+
+The miner exposes `GET /metrics` (`miner-service`). Counters are **durable** — persisted to the
+same Neon Postgres (`SENTINEL_DATABASE_URL`) when set, else a JSON sidecar for VMs/local, so a
+Render free-tier restart no longer zeroes the accumulated `requests served` volume
+(guardrail: an intent needs ≥3 miners and **≥100 real requests** to be cash-prize eligible).
+Set `SENTINEL_DATABASE_URL` on the **`sentinelvault-cve`** service in Render (same value the app
+uses). `backend: pg|file` in the `/metrics` response tells you which is active.
+
 ## Stack
 
 - **Backend:** Node 22 ESM, `@x402/fetch` + `@x402/evm` (EIP-3009), `viem`. Zero heavy frameworks.

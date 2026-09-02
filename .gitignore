@@ -2,6 +2,11 @@
 node_modules/
 *.log
 
+# runtime state (never commit sidecar volumes / stat counters)
+stats.json
+miner-service/stats.json
+miner-service/node_modules/
+
 # rust / wasm build
 scoring-module/target/
 Cargo.lock
@@ -10,6 +15,9 @@ Cargo.lock
 .env
 .env.*
 !*.json
+# re-ignore runtime stat counters that the general !*.json would otherwise admit
+stats.json
+miner-service/stats.json
 *.pem
 *.key
 app/probe_erc8183.mjs

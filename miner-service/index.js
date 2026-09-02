@@ -12,6 +12,7 @@ import http from 'node:http';
 import https from 'node:https';
 import dns from 'node:dns';
 import { URL } from 'node:url';
+import { createStatsStore } from './stats-store.js';
 
 // This VM's IPv6 egress is broken and undici/fetch cannot reach the upstream;
 // use node:https pinned to IPv4 (proven to work) for the CVE upstream call.
@@ -62,13 +63,15 @@ const cache = new Map();
 const CACHE_TTL_MS = 5 * 60 * 1000;
 
 // Request/usage counters for the guardrail (≥100 real requests per intent) + health.
-const stats = {
-  startedAt: new Date().toISOString(),
-  requests: 0,       // total /cve lookups
-  errors: 0,
-  cacheHits: 0,
-  byCve: {},         // cve_id -> count
-};
+// Durable: persisted to Postgres (Neon) when SENTINEL_DATABASE_URL is set so a Render
+// free-tier restart does NOT zero the accumulated volume; else JSON file / in-memory.
+let stats;
+let flushStats;
+async function initStats() {
+  const store = await createStatsStore({ databaseUrl: process.env.SENTINEL_DATABASE_URL });
+  stats = store.state;
+  flushStats = store.flush;
+}
 const recordHit = (cached) => {
   stats.requests += 1;
   if (cached) stats.cacheHits += 1;
@@ -152,11 +155,12 @@ const server = http.createServer(async (req, res) => {
     if (url.pathname === '/metrics') {
       const body = {
         miner: 'sentinelvault-cve',
+        backend: stats.backend,
         startedAt: stats.startedAt,
-        totalRequests: stats.requests,
-        errors: stats.errors,
-        cacheHits: stats.cacheHits,
-        byIntent: { CVE_LOOKUP: stats.requests },
+        totalRequests: stats.requests + (stats._priorRequests || 0),
+        errors: stats.errors + (stats._priorErrors || 0),
+        cacheHits: stats.cacheHits + (stats._priorHits || 0),
+        byIntent: { CVE_LOOKUP: stats.requests + (stats._priorRequests || 0) },
         byCve: stats.byCve,
       };
       return send(res, 200, body);
@@ -172,6 +176,7 @@ const server = http.createServer(async (req, res) => {
       recordHit(!!cached);
       const data = await fetchCve(cveId);
       recordCve(cveId);
+      flushStats();
       return send(res, 200, data);
     }
 
@@ -185,3 +190,14 @@ const server = http.createServer(async (req, res) => {
 });
 
 server.listen(PORT, () => console.log(`CVE miner service listening on :${PORT}`));
+
+// Flush counters so the last moments of a restart aren't lost.
+for (const sig of ['SIGTERM', 'SIGINT']) {
+  process.on(sig, async () => {
+    try { await flushStats?.(); } catch {}
+    process.exit(0);
+  });
+}
+setInterval(() => flushStats?.().catch(() => {}), 60000).unref();
+
+initStats();
