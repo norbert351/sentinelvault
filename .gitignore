@@ -15,3 +15,4 @@ Cargo.lock
 app/probe_erc8183.mjs
 app/fund_escrow.mjs
 app/run_erc8183.mjs
+app/check_live_proof.mjs
