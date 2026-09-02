@@ -61,6 +61,23 @@ function getJson(url, timeoutMs = 8000) {
 const cache = new Map();
 const CACHE_TTL_MS = 5 * 60 * 1000;
 
+// Request/usage counters for the guardrail (≥100 real requests per intent) + health.
+const stats = {
+  startedAt: new Date().toISOString(),
+  requests: 0,       // total /cve lookups
+  errors: 0,
+  cacheHits: 0,
+  byCve: {},         // cve_id -> count
+};
+const recordHit = (cached) => {
+  stats.requests += 1;
+  if (cached) stats.cacheHits += 1;
+};
+const recordCve = (cveId) => {
+  const k = (cveId || 'unknown').toUpperCase();
+  stats.byCve[k] = (stats.byCve[k] || 0) + 1;
+};
+
 function normalizeSeverity(vendorSeverity, score) {
   const s = vendorSeverity ? String(vendorSeverity).toUpperCase() : '';
   if (['CRITICAL', 'HIGH', 'MEDIUM', 'LOW'].includes(s)) return s;
@@ -130,14 +147,31 @@ function send(res, code, body) {
 const server = http.createServer(async (req, res) => {
   try {
     const url = new URL(req.url, `http://localhost:${PORT}`);
-    if (url.pathname === '/health') return send(res, 200, { status: 'ok', miner: 'sentinelvault-cve' });
+    if (url.pathname === '/health') return send(res, 200, { status: 'ok', miner: 'sentinelvault-cve', requests: stats.requests, errors: stats.errors });
+
+    if (url.pathname === '/metrics') {
+      const body = {
+        miner: 'sentinelvault-cve',
+        startedAt: stats.startedAt,
+        totalRequests: stats.requests,
+        errors: stats.errors,
+        cacheHits: stats.cacheHits,
+        byIntent: { CVE_LOOKUP: stats.requests },
+        byCve: stats.byCve,
+      };
+      return send(res, 200, body);
+    }
 
     if (url.pathname === '/cve') {
       const cveId = (url.searchParams.get('cve_id') || '').trim();
       if (!/^CVE-\d{4}-\d{4,7}$/i.test(cveId)) {
+        stats.errors += 1;
         return send(res, 422, { error: 'invalid_cve_id', detail: `Expected CVE-YYYY-XXXX, got '${cveId}'` });
       }
+      const cached = cache.get(cveId) && Date.now() - cache.get(cveId).ts < CACHE_TTL_MS;
+      recordHit(!!cached);
       const data = await fetchCve(cveId);
+      recordCve(cveId);
       return send(res, 200, data);
     }
 

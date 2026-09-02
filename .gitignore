@@ -12,3 +12,6 @@ Cargo.lock
 !*.json
 *.pem
 *.key
+app/probe_erc8183.mjs
+app/fund_escrow.mjs
+app/run_erc8183.mjs

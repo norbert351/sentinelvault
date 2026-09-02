@@ -36,18 +36,18 @@ function intentId(name) {
 }
 
 const ERC20_ABI = [
-  'function approve(address,uint256) returns (bool)',
-  'function allowance(address,address) view returns (uint256)',
-  'function balanceOf(address) view returns (uint256)',
+  { name: 'approve', type: 'function', stateMutability: 'nonpayable', inputs: [{ name: 'spender', type: 'address' }, { name: 'amount', type: 'uint256' }], outputs: [{ name: '', type: 'bool' }] },
+  { name: 'allowance', type: 'function', stateMutability: 'view', inputs: [{ name: 'owner', type: 'address' }, { name: 'spender', type: 'address' }], outputs: [{ name: '', type: 'uint256' }] },
+  { name: 'balanceOf', type: 'function', stateMutability: 'view', inputs: [{ name: 'account', type: 'address' }], outputs: [{ name: '', type: 'uint256' }] },
 ];
 const DIAMOND_ABI = [
-  'function depositUSDC(uint256)',
-  'function escrowBalance(address) view returns (uint256)',
-  'function createJob(bytes32,(address[],uint256[],string[],bool[]),address) returns (uint256)',
+  { name: 'depositUSDC', type: 'function', stateMutability: 'nonpayable', inputs: [{ name: 'amount', type: 'uint256' }], outputs: [] },
+  { name: 'escrowBalance', type: 'function', stateMutability: 'view', inputs: [{ name: 'account', type: 'address' }], outputs: [{ name: '', type: 'uint256' }] },
+  { name: 'createJob', type: 'function', stateMutability: 'nonpayable', inputs: [{ name: 'intentId', type: 'bytes32' }, { name: 'data', type: 'tuple', components: [{ name: 'addresses', type: 'address[]' }, { name: 'integers', type: 'uint256[]' }, { name: 'strings', type: 'string[]' }, { name: 'bools', type: 'bool[]' }] }, { name: 'quotee', type: 'address' }], outputs: [{ name: '', type: 'uint256' }] },
 ];
 const ONCHAIN_DATA = [{ type: 'address[]' }, { type: 'uint256[]' }, { type: 'string[]' }, { type: 'bool[]' }];
 const ZERO = '0x0000000000000000000000000000000000000000';
-const MIN_DEPOSIT = BigInt(1_000_000); // $1 USDC
+const MIN_DEPOSIT = BigInt(5_000_000); // $5 USDC — real createJob cost was >$1; floor tops escrow to cover it + margin
 
 export async function ensureEscrow() {
   const { account, publicClient, wallet } = await clients();
@@ -56,7 +56,8 @@ export async function ensureEscrow() {
   const allowance = await publicClient.readContract({ address: USDC, abi: ERC20_ABI, functionName: 'allowance', args: [account.address, DIAMOND] });
   if (allowance < MIN_DEPOSIT) {
     const req = await publicClient.simulateContract({ address: USDC, abi: ERC20_ABI, functionName: 'approve', args: [DIAMOND, BigInt(1_000_000_000_000)], account });
-    await wallet.writeContract(req.request);
+    const approveHash = await wallet.writeContract(req.request);
+    await publicClient.waitForTransactionReceipt({ hash: approveHash }); // MUST confirm before depositUSDC (transferFrom)
   }
   const escrow = await publicClient.readContract({ address: DIAMOND, abi: DIAMOND_ABI, functionName: 'escrowBalance', args: [account.address] });
   if (escrow < MIN_DEPOSIT) {

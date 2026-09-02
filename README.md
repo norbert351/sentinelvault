@@ -46,7 +46,7 @@ multiple intents, fusing the answers into a weighted risk verdict with an on-cha
 | Auto Watcher | `POST /watch`, `GET /watch`, `DELETE /watch/:id` → `watcher.js` (scheduled re-screens) | ✅ |
 | B2B SDK | `app/sdk/` (`@sentinelvault/sdk`, `SentinelVault` client) | ✅ |
 | Postgres (Neon) storage | `SENTINEL_DATABASE_URL` → `pg` backend; else node:sqlite | ✅ |
-| On-chain ERC-8183 digest | `PROOF_MODE=erc8183` → `erc8183.js` | ✅ |
+| On-chain ERC-8183 digest | `PROOF_MODE=erc8183` → `erc8183.js` | ✅ **live in prod** (verified createJob on Base Sepolia) |
 | **Paid API (Option A)** | `SENTINEL_PAYWALL` (default on) → `/screen` returns 402, requester's wallet pays USDC + signs EIP-712, replays for the verdict. `payment-gate.js` verifies amount/chainId/payTo + on-chain settlement + replay protection. | ✅ verified e2e |
 
 ### Run (live)

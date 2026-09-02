@@ -31,7 +31,7 @@ services:
       - key: SIGNAL_SOURCE
         value: live
       - key: PROOF_MODE
-        value: logging
+        value: erc8183
       # Set SENTINEL_PK as a secret in the Render dashboard (never commit it).
       - key: SENTINEL_PK
         sync: false
