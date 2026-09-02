@@ -4,7 +4,7 @@ id: 205
 slug: sentinelvault-cve
 name: SentinelVault CVE Lookup
 description: Deterministic CVE lookup resolving severity, CVSS score and vulnerability description for a given CVE identifier. Backed by the free CIRCL CVE API (no key required).
-base_url: https://sentinelvault-otrw.onrender.com
+base_url: https://sentinelvault-cve.onrender.com
 docs:
   website: https://telegraphprotocol.com
   repository: https://github.com/telegraphprotocol/telegraph-usecases

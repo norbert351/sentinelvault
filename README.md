@@ -2,6 +2,27 @@
 
 Autonomous treasury & partner vetting on ranked, verified multi-intent intelligence.
 
+**One-line pitch:** verify any token, contract, URL or partner across live, paid, on-chain-provable
+Telegraph intelligence before the money moves — one weighted verdict with evidence you can re-derive.
+
+**Who it's for:** DAO treasurers, security/risk teams, listing teams and multisig signers who move
+real money and can't afford to trust a single scan or a single source. *Not for* one-off retail
+scanners that need a free, instant answer with no audit trail.
+
+## Live deployment & on-chain state (verified 2026-09-03)
+
+| Surface | Where | Status |
+|---|---|---|
+| Miner data service (Track 1) | `https://sentinelvault-cve.onrender.com` | ✅ live, serves real CVE data + durable `/metrics` |
+| Vetting app (Track 3) | `https://sentinelvault-app.onrender.com` | ✅ live (health 200) |
+| Miner registration | Base Sepolia Diamond `0x5a2324aA18613FAD4e44bDF0d6c73Ec1f6D87ff8`, slug `sentinelvault-cve`, id `205` | ✅ `activation_status: active` |
+| WASM scorer (Track 2) | regId `1111` | ✅ submitted on-chain (eval logged, structural pass) |
+| ERC-8183 verdict digest | `createJob` on Base Sepolia `0xa3b4…45ca` (chainId 84532) | ✅ verified |
+| Repo | `github.com/norbert351/sentinelvault` (public, `master`) | ✅ |
+
+> ⚠️ **Base URL**: the miner's registered on-chain `base_url` must be updated to
+> `https://sentinelvault-cve.onrender.com` (currently a prior hostname). Command in `docs/TECHNICAL.md`.
+
 ## Repo layout
 
 | Path | What it is |
@@ -110,3 +131,13 @@ uses). `backend: pg|file` in the `/metrics` response tells you which is active.
 - **Storage:** Postgres/Neon via `SENTINEL_DATABASE_URL`, or bundled `node:sqlite` for dev.
 - **Frontend:** single `index.html`, mobile-first, served same-origin by the API (no build step, no CORS).
 - **Network:** Base Sepolia (84532) — Diamond `0x5a23…ff8` receives x402 USDC payments.
+
+## Honest status (2026-09-03)
+
+- **Implemented & tested:** miner (6/6 app verdict tests, miner e2e), WASM scorer (structural pass),
+  x402 paywall (verified e2e on-chain), ERC-8183 verdict digest (verified `createJob`), webhooks,
+  auto-watcher, B2B SDK, Neon/Postgres storage, durable miner `/metrics`.
+- **Deployed & live:** miner service + vetting app on Render.
+- **Still to do before submit:** re-point the miner's registered on-chain `base_url` to
+  `sentinelvault-cve.onrender.com` (see `docs/TECHNICAL.md`), and set `SENTINEL_DATABASE_URL` on the
+  miner service in Render so its volume counters are Postgres-backed on the free tier.
