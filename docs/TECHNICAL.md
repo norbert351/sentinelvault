@@ -59,30 +59,31 @@ Run everything with IPv4 first on this VM: `NODE_OPTIONS=--dns-result-order=ipv4
 | ERC-8183 createJob | `0xa3b4…45ca` (verified) |
 | x402 settlement | USDC (EIP-3009), per-call; app `payTo` from `SENTINEL_PAY_TO` or derived from `SENTINEL_PK` |
 
-## ⚠️ Exact on-chain fix before submit — re-point the miner `base_url`
+## ✅ On-chain fix applied (2026-09-03) — miner `base_url` re-pointed
 
-The miner is registered on-chain with a prior hostname. The **live** service is
-`https://sentinelvault-cve.onrender.com`, and `miner.yaml` now reflects it. Push `miner.yaml`, then
-run `updateMiner` with the NEW SHA-256 of the served bytes (from this repo, `master`):
+The miner was registered with a prior dead hostname. Re-pointed on-chain via `updateMiner`:
 
+- **Tx:** `0xab1721c939fa22cd19f43f037d057e968209d625e0d2e93e4e7706504c390e3c` (Base Sepolia, `result: success`)
+- **New registrationId:** `411` (old `233` → `deregistered`)
+- **New hash:** `d732a2afc377f8ec7d92aa1df47068fd3cbda9a1975eeb5e9ebc975930924fb1`
+- **Registry verified:** `activation_status: active`, `base_url: https://sentinelvault-cve.onrender.com`
+
+### The exact command (for future updates)
 ```bash
-# 1. compute the hash of the exact miner.yaml bytes that raw.githubusercontent.com serves now
-git push   # ensure miner.yaml above is on master and public first
-curl -s https://raw.githubusercontent.com/norbert351/sentinelvault/master/miner.yaml | sha256sum
-# → d732a2afc377f8ec7d92aa1df47068fd3cbda9a1975eeb5e9ebc975930924fb1
-
-# 2. updateMiner with cast (from ~/.foundry/bin; Base Sepolia):
-# cast send 0x5a2324aA18613FAD4e44bDF0d6c73Ec1f6D87ff8 \
-#   "updateMiner(string,bytes32,address,uint256,string[])" \
-#   "https://raw.githubusercontent.com/norbert351/sentinelvault/master/miner.yaml" \
-#   "<sha256-above>" \
-#   0x73b16058d57a6337060677496d4a8e97a9554539 \
-#   10000 '["CVE_LOOKUP"]' \
-#   --rpc-url https://base-sepolia.publicnode.com --private-key "$SENTINEL_PK" --legacy
+# update the hosted YAML first (miner.yaml on master, public), then:
+cast send 0x5a2324aA18613FAD4e44bDF0d6c73Ec1f6D87ff8 \
+  "updateMiner(uint256,string,bytes32,address,uint256,string[])" \
+  <oldRegistrationId> \
+  "https://raw.githubusercontent.com/norbert351/sentinelvault/master/miner.yaml" \
+  "<sha256-of-served-bytes>" \
+  0x73b16058d57a6337060677496d4A8e97A9554539 \
+  10000 '["CVE_LOOKUP"]' \
+  --rpc-url https://base-sepolia.publicnode.com --private-key "$SENTINEL_PK" --legacy
 ```
 
->`updateMiner` issues a **new registrationId** (old goes `superseded`), and nodes rehydrate within
->1–5 min. Verify: `GET /api/miners`, then `/api/miners/<newId>` until `base_url` = the live host.
+> `updateMiner` deregisters the old entry and registers a new one atomically → you get a **new
+> `registrationId`** each time. Keep it live through the whole judging window. Nodes rehydrate the
+> served YAML/base_url within 1–5 min of the tx.**
 
 ## Data model
 

@@ -20,8 +20,9 @@ scanners that need a free, instant answer with no audit trail.
 | ERC-8183 verdict digest | `createJob` on Base Sepolia `0xa3b4…45ca` (chainId 84532) | ✅ verified |
 | Repo | `github.com/norbert351/sentinelvault` (public, `master`) | ✅ |
 
-> ⚠️ **Base URL**: the miner's registered on-chain `base_url` must be updated to
-> `https://sentinelvault-cve.onrender.com` (currently a prior hostname). Command in `docs/TECHNICAL.md`.
+> ✅ **Base URL (fixed 2026-09-03):** the miner's registered on-chain `base_url` was re-pointed to
+> `https://sentinelvault-cve.onrender.com` via `updateMiner` (tx `0xab1721…903e`, new regId `411`).
+> Registry verified: `status active`, `base_url = sentinelvault-cve.onrender.com`.
 
 ## Repo layout
 
@@ -138,6 +139,7 @@ uses). `backend: pg|file` in the `/metrics` response tells you which is active.
   x402 paywall (verified e2e on-chain), ERC-8183 verdict digest (verified `createJob`), webhooks,
   auto-watcher, B2B SDK, Neon/Postgres storage, durable miner `/metrics`.
 - **Deployed & live:** miner service + vetting app on Render.
-- **Still to do before submit:** re-point the miner's registered on-chain `base_url` to
-  `sentinelvault-cve.onrender.com` (see `docs/TECHNICAL.md`), and set `SENTINEL_DATABASE_URL` on the
-  miner service in Render so its volume counters are Postgres-backed on the free tier.
+- **Still to do before submit:** set `SENTINEL_DATABASE_URL` on the miner service in Render (a
+  dashboard secret — no Render API token on this VM) so its volume counters are Postgres-backed on
+  the free tier rather than the JSON sidecar. Everything else verified live, including the re-pointed
+  miner `base_url`.
